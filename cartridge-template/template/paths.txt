@@ -1,0 +1,5 @@
+Place .war files to be deployed in the deploy directory.
+Place files that need to be in the CLASSPATH in the classpath directory.
+
+The domain home can be found at ~/weblogic/domain/
+Files pushed via git are located at ~/app-root/repo/

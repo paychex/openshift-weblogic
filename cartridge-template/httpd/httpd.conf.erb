@@ -1,0 +1,29 @@
+LoadModule dir_module modules/mod_dir.so
+
+Listen <%= ENV['OPENSHIFT_WEBL_IP'] %>:<%= ENV['OPENSHIFT_WEBL_PORT'] %>
+ServerRoot "<%= ENV['OPENSHIFT_WEBL_DIR'] %>/httpd"
+DocumentRoot "<%= ENV['OPENSHIFT_WEBL_DIR'] %>/httpd/public_html"
+
+User <%= ENV['OPENSHIFT_APP_UUID'] %>
+Group <%= ENV['OPENSHIFT_APP_UUID'] %>
+
+PidFile <%= ENV['OPENSHIFT_WEBL_DIR'] %>/pid/httpd.pid
+
+ServerTokens OS
+Timeout 5
+KeepAlive Off
+MaxKeepAliveRequests 100
+KeepAliveTimeout 3
+
+ServerAdmin root@localhost
+UseCanonicalName Off
+HostnameLookups Off
+ErrorLog "<%= ENV['OPENSHIFT_WEBL_DIR'] %>/httpd/error_log"
+
+DefaultType text/html
+DirectoryIndex index.html
+
+<Directory />
+    AllowOverride None
+</Directory>
+

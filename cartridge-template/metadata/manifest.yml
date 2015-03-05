@@ -1,0 +1,200 @@
+#
+# Copyright 2015 Paychex, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+Name: weblogic-12c
+Cartridge-Short-Name: WEBL
+Cartridge-Version: "0.2.1"
+Compatible-Versions: ['0.2', '0.2.1']
+Cartridge-Vendor: paychex
+Display-Name: WebLogic 12.1.2
+Description: "WebLogic Middleware Server"
+Version: "12.1.2"
+Versions: ['12.1.2']
+License: Oracle
+License-Url: http://oracle.com
+Vendor: Oracle
+Website: http://oracle.com
+Categories:
+  - service
+  - weblogic
+  - web_framework
+Provides:
+  - "weblogic"
+  - "weblogic-12.1.2"
+Scaling:
+  Min: 1
+  Max: -1
+Cart-Data:
+  - Key: OPENSHIFT_WEBL_LOG_DIR
+    Type: environment
+    Description: "Directory to store application log files."
+  - Key: OPENSHIFT_TMP_DIR
+    Type: environment
+    Description: "Directory to store application temporary files."
+  - Key: OPENSHIFT_REPO_DIR
+    Type: environment
+    Description: "Application root directory where application files reside. This directory is reset every time you do a git-push"
+  - Key: OPENSHIFT_WEBL_PORT
+    Type: environment
+    Description: "Internal port to which the web-framework binds to."
+  - Key: OPENSHIFT_WEBL_IP
+    Type: environment
+    Description: "Internal IP to which the web-framework binds to."
+  - Key: OPENSHIFT_APP_DNS
+    Type: environment
+    Description: "Fully qualified domain name for the application."
+  - Key: OPENSHIFT_APP_NAME
+    Type: environment
+    Description: "Application name"
+  - Key: OPENSHIFT_DATA_DIR
+    Type: environment
+    Description: "Directory to store application data files. Preserved across git-pushes. Not shared across gears."
+  - Key: OPENSHIFT_APP_UUID
+    Type: environment
+    Description: "Unique ID which identified the application. Does not change between gears."
+  - Key: OPENSHIFT_GEAR_UUID
+    Type: environment
+    Description: "Unique ID which identified the gear. This value changes between gears."
+Publishes:
+  get-doc-root:
+    Type: "FILESYSTEM:doc-root"
+  publish-http-url:
+    Type: "NET_TCP:httpd-proxy-info"
+  publish-gear-endpoint:
+    Type: "NET_TCP:gear-endpoint-info"
+Subscribes:
+  set-prim-ms-info:
+    Type: "ENV:NET_TCP:ms:connection-info"
+    Required: false
+Group-Overrides:
+  - components:
+    - weblogic-12.1.2
+    - web_proxy
+Endpoints:
+  - Private-IP-Name: IP
+    Private-Port-Name: PORT
+    Private-Port: 10000
+    Public-Port-Name: PUB_PORT
+    Mappings:
+    - Frontend: ""
+      Backend: ""
+      Options: { websocket: true }
+    - Frontend: "/health"
+      Backend: ""
+      Options: { health: true }
+  - Private-IP-Name: IP
+    Private-Port-Name: NM_PORT
+    Private-Port: 5556
+    Public-Port-Name: PUB_NM_PORT
+    Mappings:
+    - Frontend: "/nodemanager_port"
+      Backend: ""
+      Options: {  }
+  - Private-IP-Name: IP
+    Private-Port-Name: ADMIN_PORT
+    Private-Port: 7001
+    Public-Port-Name: ADMIN_PROXY_PORT
+    Mappings:
+    - Frontend: "/console"
+      Backend: "/console"
+      Options: { }
+  - Private-IP-Name: IP
+    Private-Port-Name: ADMIN_PORT
+    Private-Port: 7001
+    Public-Port-Name: ADMIN_PROXY_PORT
+    Mappings:
+    - Frontend: "/consolehelp"
+      Backend: "/consolehelp"
+      Options: { }
+  - Private-IP-Name: IP
+    Private-Port-Name: PORT1
+    Private-Port: 10001
+    Public-Port-Name: PUB_PORT1
+    Mappings:
+    - Frontend: "/1"
+      Backend: ""
+      Options: {  }
+  - Private-IP-Name: IP
+    Private-Port-Name: PORT2
+    Private-Port: 10002
+    Public-Port-Name: PUB_PORT2
+    Mappings:
+    - Frontend: "/2"
+      Backend: ""
+      Options: {  }
+  - Private-IP-Name: IP
+    Private-Port-Name: PORT3
+    Private-Port: 10003
+    Public-Port-Name: PUB_PORT3
+    Mappings:
+    - Frontend: "/3"
+      Backend: ""
+      Options: {  }
+  - Private-IP-Name: IP
+    Private-Port-Name: PORT4
+    Private-Port: 10004
+    Public-Port-Name: PUB_PORT4
+    Mappings:
+    - Frontend: "/4"
+      Backend: ""
+      Options: {  }
+  - Private-IP-Name: IP
+    Private-Port-Name: PORT5
+    Private-Port: 10005
+    Public-Port-Name: PUB_PORT5
+    Mappings:
+    - Frontend: "/5"
+      Backend: ""
+      Options: {  }
+  - Private-IP-Name: IP
+    Private-Port-Name: PORT6
+    Private-Port: 10006
+    Public-Port-Name: PUB_PORT6
+    Mappings:
+    - Frontend: "/6"
+      Backend: ""
+      Options: {  }
+  - Private-IP-Name: IP
+    Private-Port-Name: PORT7
+    Private-Port: 10007
+    Public-Port-Name: PUB_PORT7
+    Mappings:
+    - Frontend: "/7"
+      Backend: ""
+      Options: {  }
+  - Private-IP-Name: IP
+    Private-Port-Name: PORT8
+    Private-Port: 10008
+    Public-Port-Name: PUB_PORT8
+    Mappings:
+    - Frontend: "/8"
+      Backend: ""
+      Options: {  }
+  - Private-IP-Name: IP
+    Private-Port-Name: PORT9
+    Private-Port: 10009
+    Public-Port-Name: PUB_PORT9
+    Mappings:
+    - Frontend: "/9"
+      Backend: ""
+      Options: {  }
+  - Private-IP-Name: IP
+    Private-Port-Name: PORT10
+    Private-Port: 10010
+    Public-Port-Name: PUB_PORT10
+    Mappings:
+    - Frontend: "/10"
+      Backend: ""
+      Options: {  }

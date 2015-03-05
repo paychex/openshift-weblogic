@@ -1,0 +1,5 @@
+Cartridge files are contained in this directory. 
+
+Several scripts depend on WebLogic files that are customized by make-cart.sh 
+and are expected to be in the domain directory. Take care when including new
+files to the domain directory.

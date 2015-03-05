@@ -1,0 +1,9 @@
+<%= ENV['OPENSHIFT_WEBL_DIR'] %>logs/*.out {
+  missingok
+  size 5M
+  rotate 10
+  compress
+  delaycompress
+  notifempty
+  copytruncate
+}

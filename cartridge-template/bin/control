@@ -1,0 +1,344 @@
+#!/bin/bash
+#
+# Copyright 2015 Paychex, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
+STOPTIMEOUT=15
+FMT="%a %b %d %Y %H:%M:%S GMT%z (%Z)"
+
+function is_webl_service_running() {
+    if [ -f $OPENSHIFT_WEBL_DIR/pid/webl.pid ]; then
+        webl_pid=$( cat $OPENSHIFT_WEBL_DIR/pid/webl.pid 2> /dev/null )
+		ps -p $webl_pid 2>&1 > /dev/null
+        if [[ $? -eq 0 ]]; then
+            return 0
+        fi
+    fi
+
+    return 1
+}
+
+function is_nm_service_running() {
+    if [ -f $OPENSHIFT_WEBL_DIR/pid/nm.pid ]; then
+        nm_pid=$( cat $OPENSHIFT_WEBL_DIR/pid/nm.pid 2> /dev/null )
+		ps -p $nm_pid 2>&1 > /dev/null
+        if [[ $? -eq 0 ]]; then
+            return 0
+        fi
+    fi
+
+    return 1
+}
+
+function status() {
+	notrunning=1
+    if is_webl_service_running; then
+        client_result "Weblogic is running"
+    else
+        client_result "Weblogic is not running"
+		notrunning=0
+    fi
+	if is_nm_service_running; then
+        client_result "NodeManager is running"
+    else
+        client_result "NodeManager is not running"
+		notrunning=0
+    fi
+	[[ $notrunning ]] && exit 1
+}
+
+function start() {
+	
+	#start apache to serve up the info page
+	/usr/sbin/httpd -f "$OPENSHIFT_WEBL_DIR/httpd/httpd.conf" -k start
+
+	echo 'Starting cartridge...'
+	weblpid=$(cat "$OPENSHIFT_WEBL_DIR/pid/webl.pid")
+	if [ -n "$weblpid" ]; then
+		ps aux | grep -v grep | grep "$weblpid" > /dev/null 2>&1
+		if [[ $? ]]; then
+			echo "AdminServer is already running..."
+		else
+			startAS
+		fi
+	else
+		startAS
+	fi
+	nmpid=$(cat "$OPENSHIFT_WEBL_DIR/pid/nm.pid")
+	if [ -n "$nmpid" ]; then
+		ps aux | grep -v grep | grep "$nmpid" > /dev/null 2>&1
+		if [[ $? ]]; then
+			echo "NodeManager is already running..."
+		else
+			startNM
+		fi
+	else
+		startNM
+	fi
+}
+
+function startAS() {
+	logf="$OPENSHIFT_WEBL_LOG_DIR/webl.log"
+    pushd "$OPENSHIFT_WEBL_DIR/domain" > /dev/null
+    {
+        if [ -f "$OPENSHIFT_WEBL_DIR/domain/startWebLogic.sh" ]; then
+            echo "`date +"$FMT"`: Starting application '$OPENSHIFT_APP_NAME' from $OPENSHIFT_WEBL_DIR/domain/startWebLogic.sh..."
+
+            nohup "$OPENSHIFT_WEBL_DIR/domain/startWebLogic.sh" >> $logf 2>&1 &
+
+            ret=$?
+            weblpid=$!
+			sleep 6
+			weblpid=$(ps x | grep 'weblogic.Name=AdminServer' | grep -v grep | awk '{print $1}')
+            if [ $ret -eq 0 ]; then
+                echo "$weblpid" > "$OPENSHIFT_WEBL_DIR/pid/webl.pid"
+            else
+                echo "Application '$OPENSHIFT_APP_NAME' failed to start - $ret" 1>&2
+                exit $ret
+            fi
+        else
+            echo "WARN: Could not find the script $OPENSHIFT_WEBL_DIR/domain/startWebLogic.sh, will not start."
+        fi
+	} >> $logf
+	popd > /dev/null
+}
+
+function startNM() {
+	logf="$OPENSHIFT_WEBL_LOG_DIR/nm.log"
+	pushd "$OPENSHIFT_WEBL_DIR/domain" > /dev/null
+	{
+		#start node manger
+		nm_script=${OPENSHIFT_WEBL_DIR}/domain/bin/startNodeManager.sh
+		if [ -f "$nm_script" ]; then
+            echo "`date +"$FMT"`: Starting NodeManager for '$OPENSHIFT_APP_NAME' from $nm_script..."
+
+            nohup "$nm_script" >> $logf 2>&1 &
+
+            ret=$?
+            nmpid=$!
+			sleep 4
+			nmpid=$(ps x | grep 'weblogic.NodeManager' | grep -v grep | awk '{print $1}')
+            if [ $ret -eq 0 ]; then
+                echo "$nmpid" > "$OPENSHIFT_WEBL_DIR/pid/nm.pid"
+            else
+                echo "NodeManager for '$OPENSHIFT_APP_NAME' failed to start - $ret" 1>&2
+                exit $ret
+            fi
+        else
+            echo "WARN: Could not find the script $nm_script, will not start."
+        fi
+    } >> $logf
+	popd > /dev/null
+}
+
+function stop() {
+
+	echo 'Stopping cartridge...'	
+	
+	#stop the apache front page process
+	/usr/sbin/httpd -f "$OPENSHIFT_WEBL_DIR/httpd/httpd.conf" -k stop
+	
+	#stop admin server
+    if [ -f $OPENSHIFT_WEBL_DIR/pid/webl.pid ]; then
+        webl_pid=$( cat $OPENSHIFT_WEBL_DIR/pid/webl.pid 2> /dev/null )
+		if [ -n "$webl_pid" ]; then
+			logf="$OPENSHIFT_WEBL_LOG_DIR/webl.log"
+			echo "`date +"$FMT"`: Stopping application '$OPENSHIFT_APP_NAME' ..." >> $logf
+			/bin/kill $webl_pid
+			ret=$?
+			if [ $ret -eq 0 ]; then
+				TIMEOUT="$STOPTIMEOUT"
+				while [ $TIMEOUT -gt 0 ] && is_webl_service_running ; do
+					/bin/kill -0 $webl_pid >/dev/null 2>&1 || break
+					sleep 1
+					let TIMEOUT=${TIMEOUT}-1
+				done
+			fi
+			echo "`date +"$FMT"`: Stopped WEBL application '$OPENSHIFT_APP_NAME'" >> $logf
+			rm -f $OPENSHIFT_WEBL_DIR/pid/webl.pid
+		else
+			echo "Warning: Application '$OPENSHIFT_APP_NAME' may exist without a pid file.  Use force-stop to kill." 1>&2
+		fi
+	fi
+	
+	#stop nm
+	if [ -f $OPENSHIFT_WEBL_DIR/pid/nm.pid ]; then
+        nm_pid=$( cat $OPENSHIFT_WEBL_DIR/pid/nm.pid 2> /dev/null )
+		if [ -n "$nm_pid" ]; then
+			logf="$OPENSHIFT_WEBL_LOG_DIR/nm.log"
+			echo "`date +"$FMT"`: Stopping NodeManager for '$OPENSHIFT_APP_NAME' ..." >> $logf
+			/bin/kill $nm_pid
+			ret=$?
+			if [ $ret -eq 0 ]; then
+				TIMEOUT="$STOPTIMEOUT"
+				while [ $TIMEOUT -gt 0 ] && is_nm_service_running ; do
+					/bin/kill -0 $nm_pid >/dev/null 2>&1 || break
+					sleep 1
+					let TIMEOUT=${TIMEOUT}-1
+				done
+			fi
+
+			echo "`date +"$FMT"`: Stopped WEBL application '$OPENSHIFT_APP_NAME'" >> $logf
+			rm -f $OPENSHIFT_WEBL_DIR/pid/nm.pid
+		else
+			echo "Warning: NodeManager for '$OPENSHIFT_APP_NAME' may exist without a pid file.  Use force-stop to kill." 1>&2
+		fi
+	fi
+}
+
+function force-stop(){
+
+	#stop ms
+	. ${OPENSHIFT_WEBL_DIR}domain/wlst/get_creds.sh
+	pushd ${OPENSHIFT_WEBL_DIR}domain/bin > /dev/null
+	for MS in $(cat ${OPENSHIFT_WEBL_DIR}domain/serverlist.txt); do
+  		. stopManagedWebLogic.sh "$MS" "t3://${OPENSHIFT_WEBL_IP}:${OPENSHIFT_WEBL_ADMIN_PORT}" "$ADMIN_USERNAME" "$ADMIN_PASSWORD" > /dev/null
+	done
+	popd > /dev/null
+	
+	logf="$OPENSHIFT_WEBL_LOG_DIR/webl.log"
+	pid=$(ps x | grep 'weblogic.Name=AdminServer' | grep -v grep | awk '{print $1}')
+	kill -9 $pid
+	ret=$?
+	if [ $ret -eq 0 ]; then
+		echo "`date +"$FMT"`: Force-stopped WEBL application '$OPENSHIFT_APP_NAME'" >> $logf
+	else
+		echo "Process not found for '$OPENSHIFT_APP_NAME'." >> $logf
+	fi
+	
+	logf="$OPENSHIFT_WEBL_LOG_DIR/nm.log"
+	pid=$(ps x | grep 'weblogic.NodeManager' | grep -v grep | awk '{print $1}')
+	kill -9 $pid
+	ret=$?
+	if [ $ret -eq 0 ]; then
+		echo "`date +"$FMT"`: Force-stopped NodeManager for '$OPENSHIFT_APP_NAME'" >> $logf
+	else
+		echo "Process not found for NodeManager for '$OPENSHIFT_APP_NAME'." >> $logf
+	fi
+	
+	#RIP all other java processes"
+	echo "`date +"$FMT"`: Killing the following java pids:" >> $logf
+	pgrep -f java >> $logf
+	pkill -9 -f java
+	
+
+}
+
+function restart() {
+    bash $0 stop
+    bash $0 start
+}
+
+function build() {
+    sleep 0
+}
+
+function clear-deploys() {
+	
+	local WLST="$OPENSHIFT_WEBL_WLST"
+	if [[ -f "$OPENSHIFT_WEBL_DIR/deployedlist.txt" ]]; then
+		echo "Removing existing deployments.."
+		while read READLINE
+		do
+			if [[ -n "$READLINE" ]]; then
+				bash $WLST "$OPENSHIFT_WEBL_DIR/undeploy.py" "$READLINE"
+			fi
+		done < "$OPENSHIFT_WEBL_DIR/deployedlist.txt"
+		mv -f "$OPENSHIFT_WEBL_DIR/deployedlist.txt" "$OPENSHIFT_WEBL_DIR/deployedlist.txt.bak"
+	fi
+	
+}
+
+function post-deploy() {
+	
+	pushd "$OPENSHIFT_REPO_DIR"/deploy/ > /dev/null
+	WLST="$OPENSHIFT_WEBL_WLST"
+	
+	#check if there are any war/ear files in the deploy folder
+	ls -l "$OPENSHIFT_REPO_DIR"/deploy/*.war 2>/dev/null >/dev/null
+	RET1="$?"
+	ls -l "$OPENSHIFT_REPO_DIR"/deploy/*.ear 2>/dev/null >/dev/null
+	RET2="$?"
+	if [[ "$RET1" -ne 0 && "$RET2" -ne 0 ]]; then
+		echo "No .war or .ear files found in deploy folder, continuing..."
+		clear-deploys
+		return
+	fi
+	
+	clear-deploys
+	touch "$OPENSHIFT_WEBL_DIR/deployedlist.txt"
+	
+	for f in *.{war,ear}
+	do
+		FNAME=$(echo $f | rev | cut -d. -f2- | rev)
+		if [[ "$FNAME" = "*" ]]; then
+			continue
+		fi
+		
+		if [[ -f "${OPENSHIFT_WEBL_DIR}domain/serverlist.txt" ]]; then
+			while read READLINE
+			do
+				echo "Deploying '$f' to ManagedServer '$READLINE'..."
+				bash $WLST "$OPENSHIFT_WEBL_DIR/deploy.py" "$READLINE" "$FNAME" "$OPENSHIFT_REPO_DIR/deploy/$f"
+			done < "${OPENSHIFT_WEBL_DIR}domain/serverlist.txt"
+		else
+			echo "Deploying '$f' to AdminServer..."
+			bash $WLST "$OPENSHIFT_WEBL_DIR/deploy.py" "AdminServer" "$FNAME" "$OPENSHIFT_REPO_DIR/deploy/$f"
+		fi
+		echo "$FNAME" >> "$OPENSHIFT_WEBL_DIR/deployedlist.txt"
+		
+	done
+	popd > /dev/null
+}
+
+function pre-build() {
+    sleep 0
+}
+
+function tidy() {
+  client_message "Emptying log dir: $OPENSHIFT_WEBL_LOG_DIR"
+  shopt -s dotglob
+  rm -rf $OPENSHIFT_WEBL_DIR/logs/*
+  rm -rf $OPENSHIFT_WEBL_DIR/tmp/*
+    echo
+}
+
+#
+#  main():
+#
+
+# Ensure arguments.
+if ! [ $# -eq 1 ]; then
+    echo "Usage: $0 [start|restart|graceful|graceful-stop|stop|status]"
+    exit 1
+fi
+
+# Source utility functions.
+source $OPENSHIFT_CARTRIDGE_SDK_BASH
+
+# Handle commands.
+case "$1" in
+    start)               start       ;;
+    restart|graceful)    restart     ;;
+    graceful-stop|stop)  stop        ;;
+    status)              status      ;;
+    build)               build       ;;
+    pre-build)           pre-build   ;;
+    post-deploy)         post-deploy ;;
+    tidy)                tidy        ;;
+	force-stop)          force-stop  ;;
+    *) exit 0;
+esac
+
